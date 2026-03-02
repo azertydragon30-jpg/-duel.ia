@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Gemini Survival 3D - Ultra Edition</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Courier New', Courier, monospace; background: #000; }
+        canvas { display: block; }
+        
+        /* --- INTERFACE --- */
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; color: #0f0; text-shadow: 2px 2px #000; }
+        .overlay { position: absolute; background: rgba(0, 20, 0, 0.85); border: 3px solid #0f0; padding: 20px; pointer-events: auto; }
+        
+        #menu { top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
+        #hud { bottom: 20px; left: 20px; background: none; border: none; }
+        #shop { top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; width: 300px; text-align: center; }
+        #inventory { bottom: 20px; right: 20px; text-align: right; }
+
+        .bar { width: 250px; height: 15px; background: #222; border: 1px solid #0f0; margin: 5px 0; }
+        #hp-fill { width: 100%; height: 100%; background: #f00; transition: 0.2s; }
+        
+        button { background: #0f0; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; margin: 5px; }
+        button:hover { background: #fff; }
+        kbd { background: #333; padding: 2px 5px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div id="menu" class="overlay">
+            <h1>GEMINI SURVIVAL : PROTOCOL-3D</h1>
+            <p>Z,Q,S,D pour bouger | CLIC pour Tirer | B pour Boutique</p>
+            <button onclick="start()">INITIALISER LA SURVIE</button>
+        </div>
+
+        <div id="hud">
+            HP: <div class="bar"><div id="hp-fill"></div></div>
+            SCORE: <span id="score-val">0</span> | MUNITIONS: ∞
+        </div>
+
+        <div id="inventory" class="overlay" style="background:rgba(0,0,0,0.5); border-color:#555;">
+            📦 INVENTAIRE<br>
+            <small id="inv-list">Scanner en cours...</small>
+        </div>
+
+        <div id="shop" class="overlay">
+            <h2>🛒 TERMINAL MARCHAND</h2>
+            <p>Crédits : <span id="shop-credits">0</span></p>
+            <button onclick="buy(1)">UPGRADE ARMURE (20 pts)</button>
+            <button onclick="buy(2)">RADAR AMÉLIORÉ (50 pts)</button><br>
+            <button onclick="toggleShop()">RETOURNER AU COMBAT</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, player, clock;
+        let bullets = [], enemies = [], crystals = [];
+        let stats = { hp: 100, score: 0, armor: 1 };
+        let active = false;
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x001100, 0.05);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Lumières cybernétiques
+            const sun = new THREE.DirectionalLight(0x00ff00, 0.5);
+            sun.position.set(10, 20, 10);
+            scene.add(sun);
+            scene.add(new THREE.AmbientLight(0x112211));
+
+            // Sol grille "Tron-style"
+            const grid = new THREE.GridHelper(200, 50, 0x00ff00, 0x002200);
+            scene.add(grid);
+
+            // Joueur
+            const pGeo = new THREE.BoxGeometry(1, 2, 1);
+            const pMat = new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x004400 });
+            player = new THREE.Mesh(pGeo, pMat);
+            player.position.y = 1;
+            scene.add(player);
+
+            clock = new THREE.Clock();
+            window.addEventListener('keydown', handleInput);
+            window.addEventListener('mousedown', shoot);
+        }
+
+        function start() {
+            document.getElementById('menu').style.display = 'none';
+            active = true;
+            // Spawn initial
+            for(let i=0; i<15; i++) spawnEnemy();
+            for(let i=0; i<10; i++) spawnCrystal();
+            animate();
+            playBeep(440, 0.1); // Son start
+        }
+
+        function spawnEnemy() {
+            const eGeo = new THREE.OctahedronGeometry(0.8);
+            const eMat = new THREE.MeshStandardMaterial({ color: 0xff0000, wireframe: true });
+            const enemy = new THREE.Mesh(eGeo, eMat);
+            enemy.position.set(Math.random()*80-40, 1, Math.random()*80-40);
+            scene.add(enemy);
+            enemies.push(enemy);
+        }
+
+        function spawnCrystal() {
+            const cGeo = new THREE.IcosahedronGeometry(0.4);
+            const cMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x008888 });
+            const crystal = new THREE.Mesh(cGeo, cMat);
+            crystal.position.set(Math.random()*60-30, 0.5, Math.random()*60-30);
+            scene.add(crystal);
+            crystals.push(crystal);
+        }
+
+        function shoot() {
+            if(!active) return;
+            const bGeo = new THREE.SphereGeometry(0.2);
+            const bMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+            const bullet = new THREE.Mesh(bGeo, bMat);
+            bullet.position.copy(player.position);
+            
+            // Direction simplifiée vers l'avant (on pourrait utiliser le raycaster pour la souris)
+            bullet.userData.velocity = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion).multiplyScalar(1.2);
+            scene.add(bullet);
+            bullets.push(bullet);
+            playBeep(880, 0.05); // Son de tir
+        }
+
+        function handleInput(e) {
+            if(!active) return;
+            const s = 0.6;
+            if(e.key === 'z') player.translateZ(-s);
+            if(e.key === 's') player.translateZ(s);
+            if(e.key === 'q') player.rotation.y += 0.1;
+            if(e.key === 'd') player.rotation.y -= 0.1;
+            if(e.key === 'b') toggleShop();
+        }
+
+        function toggleShop() {
+            const s = document.getElementById('shop');
+            s.style.display = (s.style.display === 'block') ? 'none' : 'block';
+            document.getElementById('shop-credits').innerText = stats.score;
+        }
+
+        function buy(id) {
+            if(id === 1 && stats.score >= 20) { stats.score -= 20; stats.armor += 0.5; playBeep(600, 0.2); }
+            if(id === 2 && stats.score >= 50) { stats.score -= 50; scene.fog.density = 0.02; playBeep(1000, 0.2); }
+            updateUI();
+        }
+
+        // Syntétiseur audio basique (Web Audio API)
+        function playBeep(freq, dur) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            osc.start();
+            osc.stop(ctx.currentTime + dur);
+        }
+
+        function updateUI() {
+            document.getElementById('hp-fill').style.width = stats.hp + '%';
+            document.getElementById('score-val').innerText = stats.score;
+            document.getElementById('inv-list').innerHTML = `Cristaux: ${Math.floor(stats.score/5)}<br>Armure: v${stats.armor}`;
+        }
+
+        function animate() {
+            if(!active) return;
+            requestAnimationFrame(animate);
+
+            // IA et Collisions
+            enemies.forEach((en, i) => {
+                en.lookAt(player.position);
+                en.translateZ(0.05);
+                if(en.position.distanceTo(player.position) < 1.2) {
+                    stats.hp -= (0.4 / stats.armor);
+                    updateUI();
+                }
+            });
+
+            // Projectiles
+            bullets.forEach((b, bi) => {
+                b.position.add(b.userData.velocity);
+                enemies.forEach((en, ei) => {
+                    if(b.position.distanceTo(en.position) < 1.5) {
+                        scene.remove(en); enemies.splice(ei, 1);
+                        scene.remove(b); bullets.splice(bi, 1);
+                        stats.score += 10;
+                        spawnEnemy();
+                        updateUI();
+                    }
+                });
+                if(b.position.length() > 100) { scene.remove(b); bullets.splice(bi, 1); }
+            });
+
+            // Loot
+            crystals.forEach((c, i) => {
+                c.rotation.y += 0.05;
+                if(c.position.distanceTo(player.position) < 1.5) {
+                    scene.remove(c); crystals.splice(i, 1);
+                    stats.score += 5;
+                    spawnCrystal();
+                    updateUI();
+                    playBeep(1200, 0.05);
+                }
+            });
+
+            camera.position.lerp(new THREE.Vector3(player.position.x, player.position.y+15, player.position.z+15), 0.1);
+            camera.lookAt(player.position);
+
+            if(stats.hp <= 0) { alert("DÉCONNEXION. Score: " + stats.score); location.reload(); }
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
