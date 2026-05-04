@@ -3,419 +3,421 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Web 3D - ✅ STABLE</title>
+    <title>🟩 MINECRAFT WEB 3D - NO BUGS</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            margin: 0;
-            padding: 0;
-            background: linear-gradient(135deg, #87CEEB, #98D8C8);
+            background: linear-gradient(135deg, #87CEEB 0%, #98D8C8 100%);
             font-family: 'Courier New', monospace;
             overflow: hidden;
+            height: 100vh;
         }
-        canvas {
-            display: block;
+        canvas { 
+            display: block; 
             cursor: crosshair;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
         }
         .ui {
-            position: absolute;
-            top: 10px;
-            left: 10px;
+            position: fixed;
+            top: 15px;
+            left: 15px;
             color: white;
-            font-size: 18px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            z-index: 100;
+            font-size: 16px;
+            text-shadow: 2px 2px 4px #0008;
             background: rgba(0,0,0,0.4);
-            padding: 15px;
+            padding: 12px 16px;
             border-radius: 8px;
-            border: 2px solid rgba(255,255,255,0.3);
+            backdrop-filter: blur(10px);
+            z-index: 999;
         }
-        .controls {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
+        .hud {
+            position: fixed;
+            bottom: 15px;
+            left: 15px;
             color: white;
             font-size: 14px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
             background: rgba(0,0,0,0.5);
-            padding: 12px;
+            padding: 10px 14px;
             border-radius: 8px;
+            z-index: 999;
         }
         .crosshair {
-            position: absolute;
+            position: fixed;
             top: 50%;
             left: 50%;
-            width: 24px;
-            height: 24px;
-            margin: -12px 0 0 -12px;
-            background: 
-                conic-gradient(from 0deg, transparent 90deg, white 0deg 180deg, transparent 0deg 270deg, white 0deg);
+            width: 20px;
+            height: 20px;
+            margin: -10px 0 0 -10px;
+            border: 3px solid rgba(255,255,255,0.9);
             border-radius: 50%;
+            box-shadow: 0 0 12px rgba(255,255,255,0.6);
             pointer-events: none;
-            z-index: 100;
-            box-shadow: 0 0 8px rgba(255,255,255,0.8);
+            z-index: 1000;
         }
-        .fps {
-            position: absolute;
-            top: 10px;
-            right: 10px;
+        .fps-counter {
+            position: fixed;
+            top: 15px;
+            right: 15px;
             color: #00ff88;
             font-size: 18px;
             font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            text-shadow: 2px 2px 4px #0008;
+            z-index: 999;
         }
     </style>
 </head>
 <body>
     <div class="crosshair"></div>
+    
     <div class="ui">
         <div><strong>🎮 MINECRAFT WEB 3D</strong></div>
-        <div>WASD + Flèches: Move/Look | Espace: Jump</div>
-        <div>Clic G: 🪓 Casser | Clic D: 🧱 Placer (1-4)</div>
-        <div>R: Reset | T: Nouveau terrain</div>
+        <div>WASD: Move | Flèches: Caméra</div>
+        <div>Gauche: 🪓 | Droite: 🧱 (1-4)</div>
+        <div>Espace: Jump | R: Reset | T: Terrain</div>
     </div>
-    <div class="controls">
-        <strong>Bloc:</strong> <span id="selectedBlock" style="color:#4CAF50">1</span> | 
-        <strong>Pos:</strong> <span id="position">0,15,25</span>
+    
+    <div class="hud">
+        <strong>Bloc:</strong> <span id="block">1</span> | 
+        <strong>X:</strong> <span id="posX">0</span> 
+        <strong>Y:</strong> <span id="posY">15</span> 
+        <strong>Z:</strong> <span id="posZ">25</span>
     </div>
-    <div class="fps" id="fps">FPS: --</div>
+    
+    <div class="fps-counter" id="fps">FPS: 0</div>
 
-    <canvas id="canvas"></canvas>
+    <canvas id="game"></canvas>
 
     <script>
-        class MinecraftWeb {
+        class Minecraft3D {
             constructor() {
-                this.canvas = document.getElementById('canvas');
+                this.canvas = document.getElementById('game');
                 this.ctx = this.canvas.getContext('2d');
-                this.resizeCanvas();
                 
-                // Camera
-                this.camera = {
-                    x: 0, y: 15, z: 25,
-                    rotX: -0.4, rotY: 0.3,
-                    vx: 0, vy: 0, vz: 0,
-                    speed: 0.25,
-                    sensitivity: 0.004
-                };
+                this.W = window.innerWidth;
+                this.H = window.innerHeight;
+                this.canvas.width = this.W;
+                this.canvas.height = this.H;
                 
-                // World
+                // CAMERA
+                this.cx = 0;
+                this.cy = 12;
+                this.cz = 25;
+                this.rx = -0.3; // pitch
+                this.ry = 0.2;  // yaw
+                this.vx = 0;
+                this.vy = 0;
+                this.vz = 0;
+                
+                // WORLD
                 this.world = {};
-                this.selectedBlock = 1;
+                this.blockType = 1;
+                
+                // INPUT
                 this.keys = {};
+                this.mouseX = 0;
+                this.mouseY = 0;
                 
-                // Perf
-                this.lastTime = 0;
-                this.fps = 0;
-                this.frameCount = 0;
+                // LOOP
+                this.time = 0;
+                this.fpsCount = 0;
+                this.fpsTime = 0;
                 
-                this.generateWorld();
-                this.initEvents();
-                this.gameLoop(performance.now());
+                this.init();
+                this.loop();
             }
             
-            resizeCanvas() {
-                this.canvas.width = window.innerWidth;
-                this.canvas.height = window.innerHeight;
+            init() {
+                this.generateWorld();
+                this.bindEvents();
             }
             
             generateWorld() {
                 this.world = {};
-                console.log("🌍 Génération terrain...");
-                
-                for(let x = -35; x < 35; x++) {
-                    for(let z = -35; z < 35; z++) {
-                        const height = Math.floor(
-                            Math.sin(x/12)*3.5 + 
-                            Math.cos(z/15)*2.5 + 
-                            Math.sin((x*0.7+z*0.3)/18)*1.8 + 9
-                        );
+                for(let x = -30; x < 30; x++) {
+                    for(let z = -30; z < 30; z++) {
+                        let h = 6 + Math.sin(x * 0.1) * 3 + Math.cos(z * 0.12) * 2;
+                        h = Math.floor(h);
                         
-                        for(let y = 0; y < height; y++) {
-                            const type = y === height-1 ? 1 :
-                                       y > height-3 ? 4 :
-                                       2;
+                        for(let y = 0; y < h; y++) {
+                            let type = 2; // pierre
+                            if(y === h-1) type = 1; // herbe
+                            else if(y > h-4) type = 4; // sable
                             this.setBlock(x, y, z, type);
                         }
                     }
                 }
                 
-                // Arbres
-                for(let i = 0; i < 25; i++) {
-                    const x = Math.floor(Math.random()*70)-35;
-                    const z = Math.floor(Math.random()*70)-35;
-                    const h = 3 + Math.floor(Math.random()*3);
+                // arbres
+                for(let i = 0; i < 20; i++) {
+                    let x = Math.floor(Math.random() * 60) - 30;
+                    let z = Math.floor(Math.random() * 60) - 30;
+                    let trunkH = 3 + Math.floor(Math.random() * 2);
                     
-                    for(let y = 1; y < h+1; y++) {
-                        this.setBlock(x, y+1, z, 3);
+                    for(let y = 0; y < trunkH; y++) {
+                        this.setBlock(x, y + 1, z, 3);
                     }
-                    for(let dx=-1; dx<=1; dx++)for(let dz=-1; dz<=1; dz++) {
-                        this.setBlock(x+dx, h+1, z+dz, 1);
+                    for(let dx = -1; dx <= 1; dx++) {
+                        for(let dz = -1; dz <= 1; dz++) {
+                            this.setBlock(x + dx, trunkH + 1, z + dz, 1);
+                        }
                     }
                 }
-                console.log("✅ Terrain prêt !");
             }
             
-            setBlock(x, y, z, type) {
-                const key = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
-                if(type === 0) delete this.world[key];
-                else this.world[key] = type;
+            setBlock(x, y, z, t) {
+                const key = `${x}|${y}|${z}`;
+                if(t === 0) delete this.world[key];
+                else this.world[key] = t;
             }
             
             getBlock(x, y, z) {
-                return this.world[`${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`] || 0;
+                return this.world[`${x}|${y}|${z}`] || 0;
             }
             
-            initEvents() {
-                window.addEventListener('resize', () => this.resizeCanvas());
-                
-                document.addEventListener('keydown', (e) => {
-                    const key = e.key.toLowerCase();
-                    this.keys[key] = true;
-                    
-                    if('1234'.includes(e.key)) {
-                        this.selectedBlock = parseInt(e.key);
-                        document.getElementById('selectedBlock').textContent = e.key;
-                        document.getElementById('selectedBlock').style.color = 
-                            e.key==1?'#4CAF50':e.key==2?'#808080':e.key==3?'#8B4513':'#F4A460';
-                    }
-                    if(key === 'r') {
-                        this.camera = {x:0,y:15,z:25,rotX:-0.4,rotY:0.3,vx:0,vy:0,vz:0,speed:0.25,sensitivity:0.004};
-                    }
-                    if(key === 't') this.generateWorld();
+            bindEvents() {
+                window.addEventListener('resize', () => {
+                    this.W = window.innerWidth;
+                    this.H = window.innerHeight;
+                    this.canvas.width = this.W;
+                    this.canvas.height = this.H;
                 });
                 
-                document.addEventListener('keyup', (e) => {
+                document.addEventListener('keydown', e => {
+                    let k = e.key.toLowerCase();
+                    this.keys[k] = true;
+                    
+                    if('1234'.includes(e.key)) {
+                        this.blockType = parseInt(e.key);
+                        document.getElementById('block').textContent = e.key;
+                        document.getElementById('block').style.color = 
+                            e.key==1?'#4CAF50':e.key==2?'#808080':e.key==3?'#8B4513':'#F4A460';
+                    }
+                    if(k === 'r') {
+                        this.cx = 0; this.cy = 12; this.cz = 25;
+                        this.rx = -0.3; this.ry = 0.2;
+                    }
+                    if(k === 't') this.generateWorld();
+                });
+                
+                document.addEventListener('keyup', e => {
                     this.keys[e.key.toLowerCase()] = false;
                 });
                 
-                this.canvas.addEventListener('mousemove', (e) => {
-                    this.camera.rotY += e.movementX * this.camera.sensitivity;
-                    this.camera.rotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, 
-                        this.camera.rotX + e.movementY * this.camera.sensitivity));
+                this.canvas.addEventListener('mousemove', e => {
+                    this.ry += e.movementX * 0.003;
+                    this.rx = Math.max(-1.5, Math.min(1.5, this.rx - e.movementY * 0.003));
                 });
                 
-                this.canvas.addEventListener('mousedown', (e) => {
+                this.canvas.addEventListener('mousedown', e => {
                     e.preventDefault();
-                    this.handleClick(e.button === 2);
+                    this.raycast(e.button === 2);
                 });
                 
-                this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+                this.canvas.addEventListener('contextmenu', e => e.preventDefault());
             }
             
-            handleClick(place) {
-                const ray = this.getRaycast();
-                if(ray.hit) {
-                    if(place) {
-                        this.setBlock(ray.x + ray.nx*0.6, ray.y + ray.ny*0.6, ray.z + ray.nz*0.6, this.selectedBlock);
-                    } else {
-                        this.setBlock(ray.x, ray.y, ray.z, 0);
-                    }
-                }
-            }
-            
-            getRaycast() {
-                const step = 0.15;
-                let x = this.camera.x, y = this.camera.y + 0.8, z = this.camera.z;
+            raycast(placeBlock) {
+                let x = this.cx, y = this.cy + 0.8, z = this.cz;
+                const dx = Math.sin(this.ry) * Math.cos(this.rx);
+                const dy = Math.sin(this.rx);
+                const dz = Math.cos(this.ry) * Math.cos(this.rx);
                 
-                const dx = Math.sin(this.camera.rotY) * Math.cos(this.camera.rotX);
-                const dy = Math.sin(this.camera.rotX);
-                const dz = Math.cos(this.camera.rotY) * Math.cos(this.camera.rotX);
-                
-                for(let d = 0; d < 7; d += step) {
-                    const cx = Math.floor(x), cy = Math.floor(y), cz = Math.floor(z);
-                    if(this.getBlock(cx, cy, cz)) {
-                        return {
-                            hit: true, x: cx, y: cy, z: cz,
-                            nx: Math.sign(dx), ny: Math.sign(dy), nz: Math.sign(dz)
-                        };
+                for(let d = 0; d < 6; d += 0.2) {
+                    let bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+                    if(this.getBlock(bx, by, bz)) {
+                        if(placeBlock) {
+                            this.setBlock(bx + Math.sign(dx), by + Math.sign(dy), bz + Math.sign(dz), this.blockType);
+                        } else {
+                            this.setBlock(bx, by, bz, 0);
+                        }
+                        return;
                     }
-                    x += dx * step; y += dy * step; z += dz * step;
+                    x += dx * 0.2;
+                    y += dy * 0.2;
+                    z += dz * 0.2;
                 }
-                return { hit: false };
             }
             
             update(dt) {
-                const accel = 3 * dt;
-                const forward = Math.sin(this.camera.rotY);
-                const strafe = Math.cos(this.camera.rotY);
+                const speed = dt * 3;
+                const s = Math.sin(this.ry);
+                const c = Math.cos(this.ry);
                 
-                this.camera.vx *= 0.84;
-                this.camera.vz *= 0.84;
-                this.camera.vy *= 0.9;
+                this.vx *= 0.85;
+                this.vz *= 0.85;
+                this.vy *= 0.92;
                 
                 if(this.keys['w'] || this.keys['arrowup']) {
-                    this.camera.vx += forward * accel;
-                    this.camera.vz += strafe * accel;
+                    this.vx += s * speed;
+                    this.vz += c * speed;
                 }
                 if(this.keys['s'] || this.keys['arrowdown']) {
-                    this.camera.vx -= forward * accel;
-                    this.camera.vz -= strafe * accel;
+                    this.vx -= s * speed;
+                    this.vz -= c * speed;
                 }
                 if(this.keys['a'] || this.keys['arrowleft']) {
-                    this.camera.vx -= strafe * accel;
-                    this.camera.vz += forward * accel;
+                    this.vx -= c * speed;
+                    this.vz += s * speed;
                 }
                 if(this.keys['d'] || this.keys['arrowright']) {
-                    this.camera.vx += strafe * accel;
-                    this.camera.vz -= forward * accel;
+                    this.vx += c * speed;
+                    this.vz -= s * speed;
                 }
                 if(this.keys[' ']) {
-                    if(Math.abs(this.camera.vy) < 0.01) this.camera.vy = 0.4;
+                    if(Math.abs(this.vy) < 0.01) this.vy = 0.35;
                 }
                 
-                this.camera.x += this.camera.vx;
-                this.camera.y += this.camera.vy;
-                this.camera.z += this.camera.vz;
+                this.cx += this.vx;
+                this.cy += this.vy;
+                this.cz += this.vz;
                 
-                // Collision
-                const fy = Math.floor(this.camera.y - 1.7);
-                if(this.getBlock(Math.floor(this.camera.x), fy, Math.floor(this.camera.z))) {
-                    this.camera.y = fy + 2.7;
-                    this.camera.vy = 0;
+                // collision sol
+                let fy = Math.floor(this.cy - 1.6);
+                if(this.getBlock(Math.floor(this.cx), fy, Math.floor(this.cz))) {
+                    this.cy = fy + 2.6;
+                    this.vy = 0;
                 }
-                this.camera.vy -= 0.02 * dt * 60;
+                this.vy -= 0.02 * dt * 60;
                 
-                document.getElementById('position').textContent = 
-                    `${Math.floor(this.camera.x)},${Math.floor(this.camera.y)},${Math.floor(this.camera.z)}`;
-            }
-            
-            gameLoop(time) {
-                const dt = Math.min((time - this.lastTime)/16.67, 2);
-                this.lastTime = time;
-                
-                this.update(dt);
-                this.render();
-                
-                this.frameCount++;
-                if(time > 1000) {
-                    this.fps = Math.round(this.frameCount * 1000 / time);
-                    document.getElementById('fps').textContent = `FPS: ${this.fps}`;
-                    this.frameCount = 0;
-                }
-                
-                requestAnimationFrame(t => this.gameLoop(t));
+                // update HUD
+                document.getElementById('posX').textContent = Math.floor(this.cx);
+                document.getElementById('posY').textContent = Math.floor(this.cy);
+                document.getElementById('posZ').textContent = Math.floor(this.cz);
             }
             
             render() {
                 const ctx = this.ctx;
-                const w = this.canvas.width;
-                const h = this.canvas.height;
-                
                 ctx.fillStyle = '#87CEEB';
-                ctx.fillRect(0, 0, w, h);
+                ctx.fillRect(0, 0, this.W, this.H);
                 
-                const keys = Object.keys(this.world);
-                keys.sort((a,b) => {
-                    const [ax,ay,az] = a.split(',').map(Number);
-                    const [bx,by,bz] = b.split(',').map(Number);
-                    return ((bx-this.camera.x)**2+(by-this.camera.y)**2+(bz-this.camera.z)**2) - 
-                           ((ax-this.camera.x)**2+(ay-this.camera.y)**2+(az-this.camera.z)**2);
+                // render blocks
+                const blocks = Object.keys(this.world);
+                blocks.sort((a, b) => {
+                    const [ax, ay, az] = a.split('|').map(Number);
+                    const [bx, by, bz] = b.split('|').map(Number);
+                    const da = (ax-this.cx)**2 + (ay-this.cy)**2 + (az-this.cz)**2;
+                    const db = (bx-this.cx)**2 + (by-this.cy)**2 + (bz-this.cz)**2;
+                    return db - da;
                 });
                 
-                keys.forEach(key => {
-                    const [x,y,z] = key.split(',').map(Number);
-                    this.renderBlock(x, y, z, this.world[key]);
+                blocks.forEach(key => {
+                    const [x, y, z] = key.split('|').map(Number);
+                    const type = this.world[key];
+                    this.drawBlock(x, y, z, type);
                 });
             }
             
-            renderBlock(x, y, z, type) {
+            drawBlock(x, y, z, type) {
+                const colors = ['#4CAF50', '#808080', '#8B4513', '#F4A460'];
+                const color = colors[type - 1];
+                
                 const faces = [
-                    [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], // Z+
-                    [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], // X+
-                    [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], // Y+
-                    [[0,0,0],[0,1,0],[1,1,0],[1,0,0]], // Z-
-                    [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], // X-
-                    [[0,0,0],[1,0,0],[1,0,1],[0,0,1]]  // Y-
+                    {p: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], n: [0,0,1]},  // front
+                    {p: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], n: [1,0,0]},  // right
+                    {p: [[0,1,0],[1,1,0],[1,1,1],[0,1,1]], n: [0,1,0]},  // top
+                    {p: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], n: [0,0,-1]}, // back
+                    {p: [[0,0,0],[0,1,0],[0,1,1],[0,0,1]], n: [-1,0,0]}, // left
+                    {p: [[0,0,0],[1,0,0],[1,1,0],[0,1,0]], n: [0,-1,0]}  // bottom
                 ];
                 
-                const colors = ['#4CAF50','#808080','#8B4513','#F4A460'][type-1];
-                
-                faces.forEach((face, f) => {
-                    // Backface culling simplifié
-                    const center = [0.5,0.5,0.5];
-                    const nx = f===0?0:f===1?1:f===2?0:f===3?0:f===4?-1:0;
-                    const ny = f===0?0:f===1?0:f===2?1:f===3?0:f===4?0: -1;
-                    const nz = f===0?1:f===1?0:f===2?0:f===3?-1:f===4?0:0;
+                faces.forEach(face => {
+                    // backface culling
+                    const dx = this.cx - (x + 0.5);
+                    const dy = this.cy - (y + 0.5);
+                    const dz = this.cz - (z + 0.5);
+                    if(dx * face.n[0] + dy * face.n[1] + dz * face.n[2] > 0) return;
                     
-                    if((this.camera.x-(x+0.5))*nx + (this.camera.y-(y+0.5))*ny + (this.camera.z-(z+0.5))*nz > 0)
-                        return;
+                    const points = face.p.map(p => this.project(x + p[0], y + p[1], z + p[2]));
                     
-                    const points2d = face.map(p => {
-                        const proj = this.projectPoint(x+p[0], y+p[1], z+p[2]);
-                        return proj ? [proj[0], proj[1]] : null;
-                    });
+                    // skip si tous les points sont hors écran
+                    if(points.every(p => !p)) return;
                     
-                    // Vérifier au moins 1 point visible
-                    if(!points2d.some(p => p)) return;
-                    
-                    this.drawFace(points2d, colors);
+                    this.fillPoly(points, color);
                 });
             }
             
-            drawFace(points2d, color) {
+            project(x, y, z) {
+                const dx = x - this.cx;
+                const dy = y - this.cy;
+                const dz = z - this.cz;
+                
+                // rotation Y
+                const cosY = Math.cos(-this.ry);
+                const sinY = Math.sin(-this.ry);
+                const px = dx * cosY - dz * sinY;
+                const pz = dx * sinY + dz * cosY;
+                
+                // rotation X
+                const cosX = Math.cos(-this.rx);
+                const sinX = Math.sin(-this.rx);
+                const py = dy * cosX - pz * sinX;
+                const pz2 = dy * sinX + pz * cosX;
+                
+                if(pz2 < 0.1) return null;
+                
+                const fov = 400;
+                return [
+                    this.W * 0.5 + px * fov / pz2,
+                    this.H * 0.5 - py * fov / pz2
+                ];
+            }
+            
+            fillPoly(points, color) {
                 const ctx = this.ctx;
+                const validPoints = points.filter(p => p);
+                
+                if(validPoints.length < 3) return;
+                
                 ctx.save();
                 ctx.beginPath();
+                ctx.moveTo(validPoints[0][0], validPoints[0][1]);
                 
-                // Trouver premier point valide
-                let first = points2d.find(p => p);
-                if(!first) return;
-                
-                ctx.moveTo(first[0], first[1]);
-                
-                for(let i = 0; i < points2d.length; i++) {
-                    const p = points2d[i];
-                    if(p) ctx.lineTo(p[0], p[1]);
+                for(let i = 1; i < validPoints.length; i++) {
+                    ctx.lineTo(validPoints[i][0], validPoints[i][1]);
                 }
-                
                 ctx.closePath();
                 
-                const light = 0.4 + 0.6 * Math.random(); // Lumière simple
-                const [r,g,b] = this.hexToRgb(color);
-                ctx.fillStyle = `rgb(${Math.floor(r*light)},${Math.floor(g*light)},${Math.floor(b*light)})`;
+                // lighting simple
+                const light = 0.4 + 0.6 * (0.5 + Math.sin(Date.now() * 0.001) * 0.1);
+                const r = parseInt(color.substr(1,2), 16) * light;
+                const g = parseInt(color.substr(3,2), 16) * light;
+                const b = parseInt(color.substr(5,2), 16) * light;
+                
+                ctx.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
                 ctx.fill();
                 
-                ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-                ctx.lineWidth = 0.8;
+                ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+                ctx.lineWidth = 1;
                 ctx.stroke();
-                
                 ctx.restore();
             }
             
-            hexToRgb(hex) {
-                const r = parseInt(hex.substr(1,2), 16);
-                const g = parseInt(hex.substr(3,2), 16);
-                const b = parseInt(hex.substr(5,2), 16);
-                return [r,g,b];
-            }
-            
-            projectPoint(wx, wy, wz) {
-                const dx = wx - this.camera.x;
-                const dy = wy - this.camera.y;
-                const dz = wz - this.camera.z;
+            loop() {
+                const now = performance.now();
+                const dt = Math.min((now - this.time) / 16.666, 2);
+                this.time = now;
                 
-                // Rotation
-                const rx = Math.cos(this.camera.rotX);
-                const ry = Math.sin(this.camera.rotX);
-                const sx = Math.cos(this.camera.rotY);
-                const sy = Math.sin(this.camera.rotY);
+                this.update(dt);
+                this.render();
                 
-                const py_ = dy * rx - dz * ry;
-                const pz_ = dy * ry + dz * rx;
+                this.fpsCount++;
+                this.fpsTime += dt;
+                if(this.fpsTime > 1) {
+                    document.getElementById('fps').textContent = `FPS: ${Math.round(this.fpsCount / this.fpsTime)}`;
+                    this.fpsCount = 0;
+                    this.fpsTime = 0;
+                }
                 
-                const px_ = dx * sx - pz_ * sy;
-                const pz__ = dx * sy + pz_ * sx;
-                
-                if(pz__ < 0.2) return null;
-                
-                const scale = 450 / pz__;
-                return [
-                    this.canvas.width/2 + px_ * scale,
-                    this.canvas.height/2 - py_ * scale
-                ];
+                requestAnimationFrame(() => this.loop());
             }
         }
         
-        window.addEventListener('load', () => new MinecraftWeb());
+        // START
+        window.addEventListener('load', () => {
+            console.log('🚀 Minecraft Web 3D chargé !');
+            new Minecraft3D();
+        });
     </script>
 </body>
 </html>
