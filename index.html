@@ -3,420 +3,280 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🟩 MINECRAFT WEB 3D - NO BUGS</title>
+    <title>🟩 MINECRAFT 60FPS</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: linear-gradient(135deg, #87CEEB 0%, #98D8C8 100%);
-            font-family: 'Courier New', monospace;
-            overflow: hidden;
+        * { margin: 0; padding: 0; overflow: hidden; }
+        body { 
+            background: linear-gradient(#87CEEB, #98D8C8);
+            font-family: monospace;
             height: 100vh;
         }
         canvas { 
             display: block; 
             cursor: crosshair;
             image-rendering: pixelated;
-            image-rendering: -moz-crisp-edges;
-        }
-        .ui {
-            position: fixed;
-            top: 15px;
-            left: 15px;
-            color: white;
-            font-size: 16px;
-            text-shadow: 2px 2px 4px #0008;
-            background: rgba(0,0,0,0.4);
-            padding: 12px 16px;
-            border-radius: 8px;
-            backdrop-filter: blur(10px);
-            z-index: 999;
         }
         .hud {
             position: fixed;
-            bottom: 15px;
-            left: 15px;
-            color: white;
-            font-size: 14px;
-            background: rgba(0,0,0,0.5);
-            padding: 10px 14px;
-            border-radius: 8px;
+            top: 10px; left: 10px;
+            color: white; font-size: 14px;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 12px;
+            border-radius: 6px;
             z-index: 999;
         }
         .crosshair {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            border: 3px solid rgba(255,255,255,0.9);
+            position: fixed; top: 50%; left: 50%;
+            width: 16px; height: 16px;
+            margin: -8px 0 0 -8px;
+            border: 2px solid rgba(255,255,255,0.9);
             border-radius: 50%;
-            box-shadow: 0 0 12px rgba(255,255,255,0.6);
-            pointer-events: none;
+            box-shadow: 0 0 8px white;
             z-index: 1000;
-        }
-        .fps-counter {
-            position: fixed;
-            top: 15px;
-            right: 15px;
-            color: #00ff88;
-            font-size: 18px;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px #0008;
-            z-index: 999;
         }
     </style>
 </head>
 <body>
     <div class="crosshair"></div>
-    
-    <div class="ui">
-        <div><strong>🎮 MINECRAFT WEB 3D</strong></div>
-        <div>WASD: Move | Flèches: Caméra</div>
-        <div>Gauche: 🪓 | Droite: 🧱 (1-4)</div>
-        <div>Espace: Jump | R: Reset | T: Terrain</div>
-    </div>
-    
     <div class="hud">
-        <strong>Bloc:</strong> <span id="block">1</span> | 
-        <strong>X:</strong> <span id="posX">0</span> 
-        <strong>Y:</strong> <span id="posY">15</span> 
-        <strong>Z:</strong> <span id="posZ">25</span>
+        WASD: Move | Souris: Look | 
+        G:🪓 D:🧱(1-4) | Espace:↑ | R:Reset
+        <br><span id="info">X:0 Y:12 Z:25 | Bloc:1 | FPS:60</span>
     </div>
-    
-    <div class="fps-counter" id="fps">FPS: 0</div>
 
-    <canvas id="game"></canvas>
+    <canvas id="c"></canvas>
 
     <script>
-        class Minecraft3D {
-            constructor() {
-                this.canvas = document.getElementById('game');
-                this.ctx = this.canvas.getContext('2d');
-                
-                this.W = window.innerWidth;
-                this.H = window.innerHeight;
-                this.canvas.width = this.W;
-                this.canvas.height = this.H;
-                
-                // CAMERA
-                this.cx = 0;
-                this.cy = 12;
-                this.cz = 25;
-                this.rx = -0.3; // pitch
-                this.ry = 0.2;  // yaw
-                this.vx = 0;
-                this.vy = 0;
-                this.vz = 0;
-                
-                // WORLD
-                this.world = {};
-                this.blockType = 1;
-                
-                // INPUT
-                this.keys = {};
-                this.mouseX = 0;
-                this.mouseY = 0;
-                
-                // LOOP
-                this.time = 0;
-                this.fpsCount = 0;
-                this.fpsTime = 0;
-                
-                this.init();
-                this.loop();
-            }
-            
-            init() {
-                this.generateWorld();
-                this.bindEvents();
-            }
-            
-            generateWorld() {
-                this.world = {};
-                for(let x = -30; x < 30; x++) {
-                    for(let z = -30; z < 30; z++) {
-                        let h = 6 + Math.sin(x * 0.1) * 3 + Math.cos(z * 0.12) * 2;
-                        h = Math.floor(h);
-                        
-                        for(let y = 0; y < h; y++) {
-                            let type = 2; // pierre
-                            if(y === h-1) type = 1; // herbe
-                            else if(y > h-4) type = 4; // sable
-                            this.setBlock(x, y, z, type);
-                        }
-                    }
-                }
-                
-                // arbres
-                for(let i = 0; i < 20; i++) {
-                    let x = Math.floor(Math.random() * 60) - 30;
-                    let z = Math.floor(Math.random() * 60) - 30;
-                    let trunkH = 3 + Math.floor(Math.random() * 2);
-                    
-                    for(let y = 0; y < trunkH; y++) {
-                        this.setBlock(x, y + 1, z, 3);
-                    }
-                    for(let dx = -1; dx <= 1; dx++) {
-                        for(let dz = -1; dz <= 1; dz++) {
-                            this.setBlock(x + dx, trunkH + 1, z + dz, 1);
-                        }
+        const C = document.getElementById('c');
+        const CTX = C.getContext('2d');
+        
+        let W = C.width = innerWidth;
+        let H = C.height = innerHeight;
+        
+        // CAMERA
+        let CX=0, CY=8, CZ=20, RX=-0.2, RY=0, VX=0, VY=0, VZ=0;
+        
+        // WORLD - SEULEMENT BLOCS VISIBLES
+        const WORLD = {};
+        let BLOCK_TYPE = 1;
+        let KEYS = {};
+        let TIME = 0;
+        
+        // OPTIMISATION: render distance
+        const RENDER_DIST = 35;
+        
+        // COULEURS
+        const COLORS = ['#4a9', '#666', '#843', '#da9'];
+        
+        // GÉNÉRATION TERRAIN
+        function generateChunk() {
+            WORLD.length = 0;
+            for(let x=-RENDER_DIST; x<RENDER_DIST; x++) {
+                for(let z=-RENDER_DIST; z<RENDER_DIST; z++) {
+                    let h = 5 + Math.sin(x*.08)*2.5 + Math.cos(z*.1)*2;
+                    h = Math.floor(h);
+                    for(let y=0; y<h; y++) {
+                        let t = y==h-1 ? 1 : y>h-3 ? 4 : 2;
+                        setBlock(x,y,z,t);
                     }
                 }
             }
-            
-            setBlock(x, y, z, t) {
-                const key = `${x}|${y}|${z}`;
-                if(t === 0) delete this.world[key];
-                else this.world[key] = t;
-            }
-            
-            getBlock(x, y, z) {
-                return this.world[`${x}|${y}|${z}`] || 0;
-            }
-            
-            bindEvents() {
-                window.addEventListener('resize', () => {
-                    this.W = window.innerWidth;
-                    this.H = window.innerHeight;
-                    this.canvas.width = this.W;
-                    this.canvas.height = this.H;
-                });
-                
-                document.addEventListener('keydown', e => {
-                    let k = e.key.toLowerCase();
-                    this.keys[k] = true;
-                    
-                    if('1234'.includes(e.key)) {
-                        this.blockType = parseInt(e.key);
-                        document.getElementById('block').textContent = e.key;
-                        document.getElementById('block').style.color = 
-                            e.key==1?'#4CAF50':e.key==2?'#808080':e.key==3?'#8B4513':'#F4A460';
-                    }
-                    if(k === 'r') {
-                        this.cx = 0; this.cy = 12; this.cz = 25;
-                        this.rx = -0.3; this.ry = 0.2;
-                    }
-                    if(k === 't') this.generateWorld();
-                });
-                
-                document.addEventListener('keyup', e => {
-                    this.keys[e.key.toLowerCase()] = false;
-                });
-                
-                this.canvas.addEventListener('mousemove', e => {
-                    this.ry += e.movementX * 0.003;
-                    this.rx = Math.max(-1.5, Math.min(1.5, this.rx - e.movementY * 0.003));
-                });
-                
-                this.canvas.addEventListener('mousedown', e => {
-                    e.preventDefault();
-                    this.raycast(e.button === 2);
-                });
-                
-                this.canvas.addEventListener('contextmenu', e => e.preventDefault());
-            }
-            
-            raycast(placeBlock) {
-                let x = this.cx, y = this.cy + 0.8, z = this.cz;
-                const dx = Math.sin(this.ry) * Math.cos(this.rx);
-                const dy = Math.sin(this.rx);
-                const dz = Math.cos(this.ry) * Math.cos(this.rx);
-                
-                for(let d = 0; d < 6; d += 0.2) {
-                    let bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
-                    if(this.getBlock(bx, by, bz)) {
-                        if(placeBlock) {
-                            this.setBlock(bx + Math.sign(dx), by + Math.sign(dy), bz + Math.sign(dz), this.blockType);
-                        } else {
-                            this.setBlock(bx, by, bz, 0);
-                        }
-                        return;
-                    }
-                    x += dx * 0.2;
-                    y += dy * 0.2;
-                    z += dz * 0.2;
-                }
-            }
-            
-            update(dt) {
-                const speed = dt * 3;
-                const s = Math.sin(this.ry);
-                const c = Math.cos(this.ry);
-                
-                this.vx *= 0.85;
-                this.vz *= 0.85;
-                this.vy *= 0.92;
-                
-                if(this.keys['w'] || this.keys['arrowup']) {
-                    this.vx += s * speed;
-                    this.vz += c * speed;
-                }
-                if(this.keys['s'] || this.keys['arrowdown']) {
-                    this.vx -= s * speed;
-                    this.vz -= c * speed;
-                }
-                if(this.keys['a'] || this.keys['arrowleft']) {
-                    this.vx -= c * speed;
-                    this.vz += s * speed;
-                }
-                if(this.keys['d'] || this.keys['arrowright']) {
-                    this.vx += c * speed;
-                    this.vz -= s * speed;
-                }
-                if(this.keys[' ']) {
-                    if(Math.abs(this.vy) < 0.01) this.vy = 0.35;
-                }
-                
-                this.cx += this.vx;
-                this.cy += this.vy;
-                this.cz += this.vz;
-                
-                // collision sol
-                let fy = Math.floor(this.cy - 1.6);
-                if(this.getBlock(Math.floor(this.cx), fy, Math.floor(this.cz))) {
-                    this.cy = fy + 2.6;
-                    this.vy = 0;
-                }
-                this.vy -= 0.02 * dt * 60;
-                
-                // update HUD
-                document.getElementById('posX').textContent = Math.floor(this.cx);
-                document.getElementById('posY').textContent = Math.floor(this.cy);
-                document.getElementById('posZ').textContent = Math.floor(this.cz);
-            }
-            
-            render() {
-                const ctx = this.ctx;
-                ctx.fillStyle = '#87CEEB';
-                ctx.fillRect(0, 0, this.W, this.H);
-                
-                // render blocks
-                const blocks = Object.keys(this.world);
-                blocks.sort((a, b) => {
-                    const [ax, ay, az] = a.split('|').map(Number);
-                    const [bx, by, bz] = b.split('|').map(Number);
-                    const da = (ax-this.cx)**2 + (ay-this.cy)**2 + (az-this.cz)**2;
-                    const db = (bx-this.cx)**2 + (by-this.cy)**2 + (bz-this.cz)**2;
-                    return db - da;
-                });
-                
-                blocks.forEach(key => {
-                    const [x, y, z] = key.split('|').map(Number);
-                    const type = this.world[key];
-                    this.drawBlock(x, y, z, type);
-                });
-            }
-            
-            drawBlock(x, y, z, type) {
-                const colors = ['#4CAF50', '#808080', '#8B4513', '#F4A460'];
-                const color = colors[type - 1];
-                
-                const faces = [
-                    {p: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], n: [0,0,1]},  // front
-                    {p: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], n: [1,0,0]},  // right
-                    {p: [[0,1,0],[1,1,0],[1,1,1],[0,1,1]], n: [0,1,0]},  // top
-                    {p: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], n: [0,0,-1]}, // back
-                    {p: [[0,0,0],[0,1,0],[0,1,1],[0,0,1]], n: [-1,0,0]}, // left
-                    {p: [[0,0,0],[1,0,0],[1,1,0],[0,1,0]], n: [0,-1,0]}  // bottom
-                ];
-                
-                faces.forEach(face => {
-                    // backface culling
-                    const dx = this.cx - (x + 0.5);
-                    const dy = this.cy - (y + 0.5);
-                    const dz = this.cz - (z + 0.5);
-                    if(dx * face.n[0] + dy * face.n[1] + dz * face.n[2] > 0) return;
-                    
-                    const points = face.p.map(p => this.project(x + p[0], y + p[1], z + p[2]));
-                    
-                    // skip si tous les points sont hors écran
-                    if(points.every(p => !p)) return;
-                    
-                    this.fillPoly(points, color);
-                });
-            }
-            
-            project(x, y, z) {
-                const dx = x - this.cx;
-                const dy = y - this.cy;
-                const dz = z - this.cz;
-                
-                // rotation Y
-                const cosY = Math.cos(-this.ry);
-                const sinY = Math.sin(-this.ry);
-                const px = dx * cosY - dz * sinY;
-                const pz = dx * sinY + dz * cosY;
-                
-                // rotation X
-                const cosX = Math.cos(-this.rx);
-                const sinX = Math.sin(-this.rx);
-                const py = dy * cosX - pz * sinX;
-                const pz2 = dy * sinX + pz * cosX;
-                
-                if(pz2 < 0.1) return null;
-                
-                const fov = 400;
-                return [
-                    this.W * 0.5 + px * fov / pz2,
-                    this.H * 0.5 - py * fov / pz2
-                ];
-            }
-            
-            fillPoly(points, color) {
-                const ctx = this.ctx;
-                const validPoints = points.filter(p => p);
-                
-                if(validPoints.length < 3) return;
-                
-                ctx.save();
-                ctx.beginPath();
-                ctx.moveTo(validPoints[0][0], validPoints[0][1]);
-                
-                for(let i = 1; i < validPoints.length; i++) {
-                    ctx.lineTo(validPoints[i][0], validPoints[i][1]);
-                }
-                ctx.closePath();
-                
-                // lighting simple
-                const light = 0.4 + 0.6 * (0.5 + Math.sin(Date.now() * 0.001) * 0.1);
-                const r = parseInt(color.substr(1,2), 16) * light;
-                const g = parseInt(color.substr(3,2), 16) * light;
-                const b = parseInt(color.substr(5,2), 16) * light;
-                
-                ctx.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
-                ctx.fill();
-                
-                ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-                ctx.restore();
-            }
-            
-            loop() {
-                const now = performance.now();
-                const dt = Math.min((now - this.time) / 16.666, 2);
-                this.time = now;
-                
-                this.update(dt);
-                this.render();
-                
-                this.fpsCount++;
-                this.fpsTime += dt;
-                if(this.fpsTime > 1) {
-                    document.getElementById('fps').textContent = `FPS: ${Math.round(this.fpsCount / this.fpsTime)}`;
-                    this.fpsCount = 0;
-                    this.fpsTime = 0;
-                }
-                
-                requestAnimationFrame(() => this.loop());
+            // arbres
+            for(let i=0; i<15; i++) {
+                let x=Math.floor(Math.random()*60)-30;
+                let z=Math.floor(Math.random()*60)-30;
+                for(let y=0; y<4; y++) setBlock(x,y+1,z,3);
+                for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++) 
+                    setBlock(x+dx,5,z+dz,1);
             }
         }
         
+        function setBlock(x,y,z,t) {
+            const k = `${x}|${y}|${z}`;
+            if(t) WORLD[k] = t;
+            else delete WORLD[k];
+        }
+        
+        function getBlock(x,y,z) {
+            return WORLD[`${x}|${y}|${z}`] || 0;
+        }
+        
+        // INPUT
+        addEventListener('keydown', e => {
+            let k = e.key.toLowerCase();
+            KEYS[k] = 1;
+            if('1234'.includes(e.key)) {
+                BLOCK_TYPE = +e.key;
+                document.getElementById('info').innerHTML += 
+                    `<span style="color:${COLORS[BLOCK_TYPE-1]}">●</span>`;
+            }
+            if(k=='r') { CX=0;CY=8;CZ=20;RX=-0.2;RY=0; }
+        });
+        
+        addEventListener('keyup', e => KEYS[e.key.toLowerCase()] = 0);
+        
+        C.addEventListener('mousemove', e => {
+            RY += e.movementX * .003;
+            RX = Math.max(-1.5, Math.min(1.5, RX - e.movementY * .003));
+        });
+        
+        C.addEventListener('mousedown', e => {
+            raycast(e.button == 2);
+            e.preventDefault();
+        });
+        C.addEventListener('contextmenu', e => e.preventDefault());
+        
+        // RAYCAST OPTIMISÉ
+        function raycast(place) {
+            let x=CX, y=CY+1, z=CZ;
+            let dx = Math.sin(RY)*Math.cos(RX);
+            let dy = Math.sin(RX);
+            let dz = Math.cos(RY)*Math.cos(RX);
+            
+            for(let d=0; d<5; d+=.15) {
+                let bx=Math.floor(x), by=Math.floor(y), bz=Math.floor(z);
+                if(getBlock(bx,by,bz)) {
+                    if(place) {
+                        setBlock(bx+Math.sign(dx), by+Math.sign(dy), bz+Math.sign(dz), BLOCK_TYPE);
+                    } else {
+                        setBlock(bx,by,bz,0);
+                    }
+                    return;
+                }
+                x += dx*.15; y += dy*.15; z += dz*.15;
+            }
+        }
+        
+        // UPDATE 60FPS
+        function update(dt) {
+            let speed = dt * 4;
+            let s = Math.sin(RY), c = Math.cos(RY);
+            
+            VX *= .88; VZ *= .88; VY *= .9;
+            
+            if(KEYS.w || KEYS['arrowup'])   { VX += s*speed; VZ += c*speed; }
+            if(KEYS.s || KEYS['arrowdown']) { VX -= s*speed; VZ -= c*speed; }
+            if(KEYS.a || KEYS['arrowleft']) { VX -= c*speed; VZ += s*speed; }
+            if(KEYS.d || KEYS['arrowright']){ VX += c*speed; VZ -= s*speed; }
+            if(KEYS[' ']) if(Math.abs(VY)<.01) VY = .4;
+            
+            CX += VX; CY += VY; CZ += VZ;
+            
+            // COLLISION SOL FIXÉE
+            let fy = Math.floor(CY-1.8);
+            if(getBlock(Math.floor(CX),fy,Math.floor(CZ))) {
+                CY = fy + 2.8; VY = 0;
+            }
+            VY -= .025 * dt * 60;
+            
+            // HUD
+            document.getElementById('info').innerHTML = 
+                `X:${Math.floor(CX)} Y:${Math.floor(CY)} Z:${Math.floor(CZ)} | Bloc:${BLOCK_TYPE} | FPS:60`;
+        }
+        
+        // RENDU ULTRA-OPTIMISÉ
+        function render() {
+            CTX.fillStyle = '#87CEEB';
+            CTX.fillRect(0,0,W,H);
+            
+            let blocks = Object.keys(WORLD);
+            let camDist = [];
+            
+            // TRI RAPIDE PAR DISTANCE
+            for(let i=0; i<blocks.length; i++) {
+                let [x,y,z] = blocks[i].split('|').map(Number);
+                let d = (x-CX)**2 + (y-CY)**2 + (z-CZ)**2;
+                if(d < RENDER_DIST*RENDER_DIST) {
+                    camDist.push({key:blocks[i], dist:d, x,y,z,t:WORLD[blocks[i]]});
+                }
+            }
+            
+            camDist.sort((a,b) => b.dist - a.dist);
+            
+            // DESSIN OPTIMISÉ
+            for(let i=0; i<camDist.length; i++) {
+                let b = camDist[i];
+                drawCube(b.x, b.y, b.z, b.t);
+            }
+        }
+        
+        // CUBE ULTRA-RAPIDE
+        function drawCube(x,y,z,t) {
+            let col = COLORS[t-1];
+            let faces = [
+                [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], // front
+                [[1,0,0],[1,0,1],[1,1,1],[1,1,0]], // right  
+                [[0,1,0],[0,1,1],[1,1,1],[1,1,0]]  // top
+            ];
+            
+            for(let f=0; f<faces.length; f++) {
+                let pts = faces[f].map(p => project(x+p[0],y+p[1],z+p[2]));
+                if(pts.every(p=>!p)) continue;
+                
+                CTX.fillStyle = shadeColor(col, 0.6 + f*.1);
+                CTX.beginPath();
+                let first = pts.find(p=>p);
+                CTX.moveTo(first[0], first[1]);
+                for(let j=1; j<pts.length; j++) {
+                    if(pts[j]) CTX.lineTo(pts[j][0], pts[j][1]);
+                }
+                CTX.closePath();
+                CTX.fill();
+                CTX.strokeStyle = '#0004';
+                CTX.lineWidth = .5;
+                CTX.stroke();
+            }
+        }
+        
+        function shadeColor(hex, alpha) {
+            let r = parseInt(hex.slice(1,3),16) * alpha;
+            let g = parseInt(hex.slice(3,5),16) * alpha;
+            let b = parseInt(hex.slice(5,7),16) * alpha;
+            return `rgb(${r|0},${g|0},${b|0})`;
+        }
+        
+        // PROJECTION RAPIDE
+        function project(wx,wy,wz) {
+            let dx = wx - CX;
+            let dy = wy - CY;
+            let dz = wz - CZ;
+            
+            // rot Y
+            let px = dx * Math.cos(-RY) - dz * Math.sin(-RY);
+            let pz = dx * Math.sin(-RY) + dz * Math.cos(-RY);
+            
+            // rot X
+            let py = dy * Math.cos(-RX) - pz * Math.sin(-RX);
+            pz = dy * Math.sin(-RX) + pz * Math.cos(-RX);
+            
+            if(pz < .2) return null;
+            
+            let scale = 350 / pz;
+            return [
+                W*.5 + px * scale,
+                H*.5 - py * scale
+            ];
+        }
+        
+        // LOOP 60FPS
+        let lastTime = 0;
+        function loop(t) {
+            let dt = Math.min((t - lastTime)/16.67, 2);
+            lastTime = t;
+            
+            update(dt);
+            render();
+            
+            requestAnimationFrame(loop);
+        }
+        
         // START
-        window.addEventListener('load', () => {
-            console.log('🚀 Minecraft Web 3D chargé !');
-            new Minecraft3D();
+        generateChunk();
+        requestAnimationFrame(loop);
+        
+        addEventListener('resize', () => {
+            W = C.width = innerWidth;
+            H = C.height = innerHeight;
         });
     </script>
 </body>
