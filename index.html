@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🟩 MINECRAFT - NO RESPAWN BUG</title>
+    <title>🟩 MINECRAFT - SPAWN SUR SOL</title>
     <style>
         * { margin: 0; padding: 0; overflow: hidden; }
         body { 
@@ -35,7 +35,7 @@
         <strong>🎮 MINECRAFT WEB</strong><br>
         WASD: Move | Souris: Regard | 
         Clic G:🪓 D:🧱(1-4) | Espace:↑ | R:Reset
-        <br><span id="info">X:0 Y:16 Z:25 | Bloc:1</span>
+        <br><span id="info">X:0 Y:16 Z:25 | Bloc:1 | Ground:✓</span>
     </div>
     <canvas id="c"></canvas>
 
@@ -45,86 +45,77 @@
         let W = C.width = innerWidth;
         let H = C.height = innerHeight;
 
-        // CAMERA STABLE
-        let CX = 0, CY = 18, CZ = 30;
+        // CAMERA
+        let CX = 0, CY = 14, CZ = 25;  // SPAWN SUR PLATEFORME
         let RX = -0.25, RY = 0;
         let VX = 0, VZ = 0, VY = 0;
-        let ON_GROUND = false;
+        let ON_GROUND = true;
 
-        // GAME STATE
+        // GAME
         const WORLD = {};
         let BLOCK_TYPE = 1;
         const KEYS = {};
 
-        // CONSTANTES
-        const GRAVITY = 0.008;
-        const JUMP_VEL = 0.22;
-        const MOVE_SPEED = 3.2;
-        const RENDER_RANGE = 28;
+        // PARAMS
+        const GRAVITY = 0.01;
+        const JUMP_VEL = 0.25;
+        const MOVE_SPEED = 3;
+        const VIEW_DIST = 25;
 
         const BLOCK_COLORS = {
-            1: '#4CAF50', // herbe
-            2: '#7D7D7D', // pierre  
-            3: '#A0522D', // bois
-            4: '#F4A460'  // sable
+            1: '#4CAF50', 2: '#7D7D7D', 
+            3: '#A0522D', 4: '#F4A460'
         };
 
-        // WORLD GEN
+        // MONDE AVEC PLATEFORME CENTRALE
         function generateWorld() {
             WORLD.length = 0;
             
-            // TERRAIN PLAT + HAUT
-            for(let x = -RENDER_RANGE; x < RENDER_RANGE; x++) {
-                for(let z = -RENDER_RANGE; z < RENDER_RANGE; z++) {
-                    let height = 10 + Math.sin(x * 0.07) * 1.8 + Math.cos(z * 0.09) * 1.5;
-                    height = Math.floor(height);
-                    
-                    // sol
-                    for(let y = 0; y < height; y++) {
-                        let type = (y === height - 1) ? 1 : 
-                                  (y > height - 4) ? 4 : 2;
-                        WORLD[`${x}|${y}|${z}`] = type;
+            // PLATEFORME CENTRALE SOLIDE (0,0)
+            for(let x = -8; x <= 8; x++) {
+                for(let z = -8; z <= 8; z++) {
+                    WORLD[`${x}|10|${z}`] = 1; // herbe plate
+                    WORLD[`${x}|9|${z}`] = 2;  // pierre dessous
+                }
+            }
+            
+            // TERRAIN AUTOUR
+            for(let x = -VIEW_DIST; x < VIEW_DIST; x++) {
+                for(let z = -VIEW_DIST; z < VIEW_DIST; z++) {
+                    if(Math.abs(x) > 8 || Math.abs(z) > 8) {
+                        let height = 8 + Math.sin(x * 0.08) * 2 + Math.cos(z * 0.1) * 1.5;
+                        height = Math.floor(height);
+                        
+                        for(let y = 0; y < height; y++) {
+                            let type = (y === height - 1) ? 1 : 2;
+                            WORLD[`${x}|${y}|${z}`] = type;
+                        }
                     }
                 }
             }
             
-            // arbres espacés
-            for(let i = 0; i < 8; i++) {
-                let x = (Math.random() - 0.5) * 50;
-                let z = (Math.random() - 0.5) * 50;
-                x = Math.floor(x); z = Math.floor(z);
-                
-                // tronc
-                for(let y = 10; y < 14; y++) {
-                    WORLD[`${x}|${y}|${z}`] = 3;
-                }
-                // feuilles
-                for(let dx = -1; dx <= 1; dx++) {
-                    for(let dz = -1; dz <= 1; dz++) {
-                        WORLD[`${x + dx}|14|${z + dz}`] = 1;
-                    }
+            // ARBRE CENTRALE
+            for(let y = 11; y <= 14; y++) WORLD[`0|${y}|0`] = 3;
+            for(let dx = -1; dx <= 1; dx++) {
+                for(let dz = -1; dz <= 1; dz++) {
+                    WORLD[`${dx}|15|${dz}`] = 1;
                 }
             }
+            
+            console.log('✅ Monde généré avec plateforme spawn');
         }
 
         function getBlock(x, y, z) {
             return WORLD[`${Math.floor(x)}|${Math.floor(y)}|${Math.floor(z)}`] || 0;
         }
 
-        // INPUT
+        // CONTROLES
         document.addEventListener('keydown', e => {
             const k = e.key.toLowerCase();
             KEYS[k] = true;
             
-            if('1234'.includes(e.key)) {
-                BLOCK_TYPE = parseInt(e.key);
-            }
-            if(k === 'r') {
-                CX = 0; CY = 18; CZ = 30;
-                RX = -0.25; RY = 0;
-                VX = VZ = VY = 0;
-                ON_GROUND = false;
-            }
+            if('1234'.includes(e.key)) BLOCK_TYPE = parseInt(e.key);
+            if(k === 'r') resetPlayer();
         });
 
         document.addEventListener('keyup', e => {
@@ -143,59 +134,66 @@
 
         C.addEventListener('contextmenu', e => e.preventDefault());
 
-        // RAYCAST SÉCURISÉ
-        function raycast(placeBlock) {
+        function resetPlayer() {
+            CX = 0; CY = 14; CZ = 25;
+            RX = -0.25; RY = 0;
+            VX = VZ = VY = 0;
+            ON_GROUND = true;
+        }
+
+        // RAYCAST
+        function raycast(place) {
             let x = CX, y = CY + 1.6, z = CZ;
             const dx = Math.sin(RY) * Math.cos(RX);
             const dy = Math.sin(RX);
             const dz = Math.cos(RY) * Math.cos(RX);
 
-            for(let dist = 0; dist < 5; dist += 0.1) {
+            for(let d = 0; d < 6; d += 0.12) {
                 const bx = Math.floor(x);
                 const by = Math.floor(y);
                 const bz = Math.floor(z);
                 
                 if(getBlock(bx, by, bz)) {
-                    if(placeBlock) {
-                        // placer adjacent
-                        WORLD[`${bx + Math.sign(dx)}|${by + Math.sign(dy)}|${bz + Math.sign(dz)}`] = BLOCK_TYPE;
+                    if(place) {
+                        const nx = bx + Math.sign(dx);
+                        const ny = by + Math.sign(dy);
+                        const nz = bz + Math.sign(dz);
+                        WORLD[`${nx}|${ny}|${nz}`] = BLOCK_TYPE;
                     } else {
-                        // casser
                         delete WORLD[`${bx}|${by}|${bz}`];
                     }
                     return;
                 }
-                
-                x += dx * 0.1;
-                y += dy * 0.1;
-                z += dz * 0.1;
+                x += dx * 0.12;
+                y += dy * 0.12;
+                z += dz * 0.12;
             }
         }
 
-        // PHYSIQUE STABLE
+        // UPDATE STABLE
         function update(dt) {
             const speed = dt * MOVE_SPEED;
             const forward = Math.sin(RY);
-            const right = Math.cos(RY);
+            const strafe = Math.cos(RY);
 
-            // mouvement horizontal
-            VX *= 0.92;
-            VZ *= 0.92;
+            // mouvement
+            VX *= 0.9;
+            VZ *= 0.9;
 
-            if(KEYS['w'] || KEYS['arrowup']) {
+            if((KEYS['w'] || KEYS['arrowup'])) {
                 VX += forward * speed;
-                VZ += right * speed;
+                VZ += strafe * speed;
             }
-            if(KEYS['s'] || KEYS['arrowdown']) {
+            if((KEYS['s'] || KEYS['arrowdown'])) {
                 VX -= forward * speed;
-                VZ -= right * speed;
+                VZ -= strafe * speed;
             }
-            if(KEYS['a'] || KEYS['arrowleft']) {
-                VX -= right * speed;
+            if((KEYS['a'] || KEYS['arrowleft'])) {
+                VX -= strafe * speed;
                 VZ += forward * speed;
             }
-            if(KEYS['d'] || KEYS['arrowright']) {
-                VX += right * speed;
+            if((KEYS['d'] || KEYS['arrowright'])) {
+                VX += strafe * speed;
                 VZ -= forward * speed;
             }
 
@@ -205,23 +203,22 @@
                 ON_GROUND = false;
             }
 
-            // appliquer vitesse
+            // gravité
+            VY -= GRAVITY * dt * 60;
+
+            // mouvement
             CX += VX;
             CZ += VZ;
             CY += VY;
 
-            // GRAVITÉ + COLLISION SOLIDE
-            VY -= GRAVITY * dt * 60;
-
-            // test collision sol (taille joueur 1.8)
-            const feetY = Math.floor(CY - 1.8);
+            // COLLISION SOLIDE
+            const footY = Math.floor(CY - 1.8);
             const px = Math.floor(CX);
             const pz = Math.floor(CZ);
 
-            if(getBlock(px, feetY, pz)) {
-                // sur sol
-                CY = feetY + 2.8;
-                VY = 0;
+            if(getBlock(px, footY, pz)) {
+                CY = footY + 2.8;
+                VY = Math.max(0, VY);
                 ON_GROUND = true;
             } else {
                 ON_GROUND = false;
@@ -229,126 +226,116 @@
 
             // HUD
             document.getElementById('info').textContent = 
-                `X:${Math.floor(CX)} Y:${Math.floor(CY)} Z:${Math.floor(CZ)} | Bloc:${BLOCK_TYPE}`;
+                `X:${Math.floor(CX)} Y:${Math.floor(CY)} Z:${Math.floor(CZ)} | Bloc:${BLOCK_TYPE} | Ground:${ON_GROUND?'✓':'✗'}`;
         }
 
-        // RENDER OPTIMISÉ
+        // RENDER
         function render() {
             CTX.fillStyle = '#87CEEB';
             CTX.fillRect(0, 0, W, H);
 
-            const blocks = Object.keys(WORLD);
-            const visibleBlocks = [];
+            const allBlocks = Object.keys(WORLD);
+            const visible = [];
 
-            // filtrage + tri distance
-            for(let i = 0; i < blocks.length; i++) {
-                const [x, y, z] = blocks[i].split('|').map(Number);
-                const distSq = (x - CX) ** 2 + (y - CY) ** 2 + (z - CZ) ** 2;
-                
-                if(distSq < RENDER_RANGE * RENDER_RANGE && Math.abs(y - CY) < 25) {
-                    visibleBlocks.push({x, y, z, type: WORLD[blocks[i]], dist: distSq});
+            for(let i = 0; i < allBlocks.length; i++) {
+                const [x, y, z] = allBlocks[i].split('|').map(Number);
+                const dist2 = (x-CX)**2 + (z-CZ)**2;
+                if(dist2 < VIEW_DIST*VIEW_DIST && Math.abs(y-CY) < 20) {
+                    const dist3d = (x-CX)**2 + (y-CY)**2 + (z-CZ)**2;
+                    visible.push({x,y,z,type:WORLD[allBlocks[i]],dist:dist3d});
                 }
             }
 
-            visibleBlocks.sort((a, b) => b.dist - a.dist);
+            visible.sort((a,b) => b.dist - a.dist);
 
-            for(let i = 0; i < visibleBlocks.length; i++) {
-                drawVoxel(visibleBlocks[i]);
+            for(let i = 0; i < visible.length; i++) {
+                drawBlock(visible[i]);
             }
         }
 
-        function drawVoxel(v) {
+        function drawBlock(b) {
             const faces = [
-                {verts: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], normal: [0,0,1]},
-                {verts: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], normal: [1,0,0]},
-                {verts: [[0,1,0],[1,1,0],[1,1,1],[0,1,1]], normal: [0,1,0]}
+                [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], // face avant
+                [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], // face droite
+                [[0,1,0],[1,1,0],[1,1,1],[0,1,1]]  // face haut
             ];
 
-            const color = BLOCK_COLORS[v.type];
+            const color = BLOCK_COLORS[b.type];
 
             for(let f = 0; f < faces.length; f++) {
                 const face = faces[f];
                 
-                // backface culling
-                const toCam = [CX - (v.x + 0.5), CY - (v.y + 0.5), CZ - (v.z + 0.5)];
-                if(face.normal[0] * toCam[0] + face.normal[1] * toCam[1] + face.normal[2] * toCam[2] > 0) 
+                // backface culling simple
+                const nx = f === 0 ? 0 : f === 1 ? 1 : 0;
+                const ny = f === 2 ? 1 : 0;
+                const nz = f === 0 ? 1 : 0;
+                if((CX - b.x - 0.5) * nx + (CY - b.y - 0.5) * ny + (CZ - b.z - 0.5) * nz > 0) 
                     continue;
 
-                const points2d = face.verts.map(p => projectPoint(v.x + p[0], v.y + p[1], v.z + p[2]));
+                const screenPoints = face.map(p => project(b.x + p[0], b.y + p[1], b.z + p[2]));
                 
-                if(points2d.filter(p => p).length < 3) continue;
+                if(screenPoints.filter(Boolean).length < 3) continue;
 
-                CTX.fillStyle = shadeColor(color, 0.45 + f * 0.15);
+                CTX.fillStyle = shadeColor(color, 0.5 + f * 0.12);
                 CTX.beginPath();
-                
-                const firstValid = points2d.find(p => p);
-                CTX.moveTo(firstValid[0], firstValid[1]);
-                
-                for(let j = 1; j < points2d.length; j++) {
-                    if(points2d[j]) CTX.lineTo(points2d[j][0], points2d[j][1]);
+                const first = screenPoints.find(p => p);
+                CTX.moveTo(first[0], first[1]);
+                for(let p of screenPoints) {
+                    if(p) CTX.lineTo(p[0], p[1]);
                 }
-                
                 CTX.closePath();
                 CTX.fill();
-                CTX.strokeStyle = 'rgba(0,0,0,0.25)';
-                CTX.lineWidth = 0.5;
+                CTX.strokeStyle = '#0002';
+                CTX.lineWidth = 0.6;
                 CTX.stroke();
             }
         }
 
-        function shadeColor(hex, factor) {
-            const r = Math.floor(parseInt(hex.slice(1, 3), 16) * factor);
-            const g = Math.floor(parseInt(hex.slice(3, 5), 16) * factor);
-            const b = Math.floor(parseInt(hex.slice(5, 7), 16) * factor);
+        function shadeColor(hex, intensity) {
+            const r = Math.floor(parseInt(hex.substr(1,2), 16) * intensity);
+            const g = Math.floor(parseInt(hex.substr(3,2), 16) * intensity);
+            const b = Math.floor(parseInt(hex.substr(5,2), 16) * intensity);
             return `rgb(${r},${g},${b})`;
         }
 
-        function projectPoint(wx, wy, wz) {
-            const dx = wx - CX;
-            const dy = wy - CY;
-            const dz = wz - CZ;
+        function project(x, y, z) {
+            const dx = x - CX;
+            const dy = y - CY;
+            const dz = z - CZ;
 
-            // Rotation Y
-            const cosY = Math.cos(-RY);
-            const sinY = Math.sin(-RY);
+            const cosY = Math.cos(-RY), sinY = Math.sin(-RY);
             const px = dx * cosY - dz * sinY;
             const pz = dx * sinY + dz * cosY;
 
-            // Rotation X
-            const cosX = Math.cos(-RX);
-            const sinX = Math.sin(-RX);
+            const cosX = Math.cos(-RX), sinX = Math.sin(-RX);
             const py = dy * cosX - pz * sinX;
-            const pzFinal = dy * sinX + pz * cosX;
+            const pz2 = dy * sinX + pz * cosX;
 
-            if(pzFinal < 0.2) return null;
+            if(pz2 < 0.18) return null;
 
-            const fov = 380;
-            return [
-                W * 0.5 + px * fov / pzFinal,
-                H * 0.5 - py * fov / pzFinal
-            ];
+            const scale = 360 / pz2;
+            return [W * 0.5 + px * scale, H * 0.5 - py * scale];
         }
 
-        // MAIN LOOP
-        let lastTime = 0;
-        function gameLoop(currentTime) {
-            const deltaTime = Math.min((currentTime - lastTime) / 16.666, 2);
-            lastTime = currentTime;
+        // GAME LOOP
+        let lastFrameTime = 0;
+        function loop(time) {
+            const deltaTime = Math.min((time - lastFrameTime) / 16.67, 2);
+            lastFrameTime = time;
 
             update(deltaTime);
             render();
 
-            requestAnimationFrame(gameLoop);
+            requestAnimationFrame(loop);
         }
 
-        // INIT
+        // START
         generateWorld();
-        requestAnimationFrame(gameLoop);
+        requestAnimationFrame(loop);
 
         window.addEventListener('resize', () => {
             W = C.width = innerWidth;
             H = C.height = innerHeight;
         });
     </script>
-</body>
 </html>
